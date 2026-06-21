@@ -1,0 +1,64 @@
+---
+/**
+ * src/pages/vault/renderable/page/[n].astro
+ * Renderable-only paginated gallery.
+ * Routes: /vault/renderable/page/1/, /vault/renderable/page/2/, …
+ */
+import Base                from '@layouts/Base.astro';
+import ArtifactCard        from '@components/ArtifactCard.astro';
+import Pagination          from '@components/Pagination.astro';
+import { getRenderableArtifacts, paginate } from '@lib/artifacts';
+import { ITEMS_PER_PAGE }  from '@lib/types';
+
+export async function getStaticPaths() {
+  const all   = await getRenderableArtifacts();
+  const total = Math.max(1, Math.ceil(all.length / ITEMS_PER_PAGE));
+  return Array.from({ length: total }, (_, i) => ({
+    params: { n: String(i + 1) },
+    props:  { page: i + 1 },
+  }));
+}
+
+interface Props { page: number }
+
+const { page } = Astro.props;
+const all      = await getRenderableArtifacts();
+const paged    = paginate(all, page);
+---
+<Base title={`Renderable — Page ${page} of ${paged.totalPages}`}>
+
+  <div style="
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;
+    padding:0.85rem 2rem; border-bottom:1px solid var(--rim);
+    background:var(--pit); position:sticky; top:40px; z-index:40;
+  ">
+    <h1 style="
+      font-size:10px; letter-spacing:0.15em; color:var(--mist);
+      font-weight:500; text-transform:uppercase;
+    ">
+      // RENDERABLE — IFRAME ✓&nbsp;
+      <span style="color:var(--teal)">{paged.totalItems}</span>
+    </h1>
+    <a href="/vault/page/1/" style="font-size:10px; color:var(--ash); letter-spacing:0.06em">
+      ← all artifacts
+    </a>
+  </div>
+
+  <div style="
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));
+    gap:12px;
+    padding:1.25rem 2rem;
+  ">
+    {paged.items.map(entry => (
+      <ArtifactCard entry={entry} />
+    ))}
+  </div>
+
+  <Pagination
+    currentPage={paged.currentPage}
+    totalPages={paged.totalPages}
+    baseHref="/vault/renderable/page/"
+  />
+
+</Base>

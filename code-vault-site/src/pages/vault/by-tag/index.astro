@@ -1,0 +1,44 @@
+---
+/**
+ * src/pages/vault/by-tag/index.astro
+ * Tag cloud index — all tags sorted by frequency.
+ */
+import Base            from '@layouts/Base.astro';
+import { getAllTags }  from '@lib/artifacts';
+
+const tags = await getAllTags();
+const max  = tags[0]?.count ?? 1;
+---
+<Base title="By Tag">
+  <div style="padding:1rem 2rem; border-bottom:1px solid var(--rim)">
+    <h1 style="font-size:10px; letter-spacing:0.18em; color:var(--mist); font-weight:500; text-transform:uppercase">
+      // BY TAG — {tags.length} TAGS
+    </h1>
+  </div>
+
+  <div style="padding:1.5rem 2rem; display:flex; flex-wrap:wrap; gap:8px; align-items:baseline">
+    {tags.map(({ tag, count }) => {
+      const scale = 0.75 + (count / max) * 0.75; // font scale 0.75em → 1.5em
+      return (
+        <a
+          href={`/vault/tag/${encodeURIComponent(tag)}/1/`}
+          style={`
+            font-size:${Math.round(scale * 13)}px;
+            font-weight:${count > max * 0.5 ? 600 : 400};
+            color:var(--ash);
+            padding:3px 8px;
+            border:1px solid var(--rim);
+            border-radius:2px;
+            text-decoration:none;
+            background:var(--well);
+            transition:all 0.1s;
+            letter-spacing:0.04em;
+          `}
+        >
+          {tag}
+          <sup style="font-size:9px; color:var(--mist); margin-left:2px">{count}</sup>
+        </a>
+      );
+    })}
+  </div>
+</Base>

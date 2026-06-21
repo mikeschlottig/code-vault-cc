@@ -1,0 +1,41 @@
+---
+import Base from '@layouts/Base.astro';
+---
+<Base title="404 — Not Found">
+  <div style="
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:6rem 2rem; text-align:center;
+    min-height:60vh;
+  ">
+    <div style="
+      font-family:var(--mono); font-size:6rem; font-weight:700;
+      color:var(--rim); line-height:1; letter-spacing:-0.04em;
+      margin-bottom:1.5rem;
+    ">404</div>
+
+    <h1 style="
+      font-family:var(--serif); font-style:italic;
+      font-size:1.6rem; font-weight:400; color:var(--chalk);
+      margin-bottom:0.75rem;
+    ">Artifact not found</h1>
+
+    <p style="font-size:12px; color:var(--mist); max-width:360px; line-height:1.7; margin-bottom:2rem">
+      This artifact may have been moved, re-extracted with a different slug,
+      or never existed in the vault.
+    </p>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center">
+      <a href="/vault/page/1/" style="
+        padding:8px 20px; border:1px solid var(--amber);
+        color:var(--amber); border-radius:2px; font-size:11px;
+        letter-spacing:0.08em; text-decoration:none;
+        transition:all 0.1s;
+      ">← Back to vault</a>
+      <a href="/query/" style="
+        padding:8px 20px; border:1px solid var(--rim);
+        color:var(--ash); border-radius:2px; font-size:11px;
+        letter-spacing:0.08em; text-decoration:none;
+      ">Query with DuckDB</a>
+    </div>
+  </div>
+</Base>

@@ -1,0 +1,294 @@
+---
+/**
+ * src/pages/query/index.astro
+ * In-browser DuckDB WASM query interface over the artifact manifest.
+ * Loads manifest.json at runtime, exposes it as a DuckDB table.
+ */
+import Base from '@layouts/Base.astro';
+
+const SAVED_QUERIES = [
+  {
+    label: 'Top langs',
+    sql: `SELECT lang, lang_label, COUNT(*) n, ROUND(AVG(char_len),0) avg_chars,\n  SUM(CASE WHEN renderable THEN 1 ELSE 0 END) renderable\nFROM artifacts\nGROUP BY lang, lang_label\nORDER BY n DESC`,
+  },
+  {
+    label: 'Renderables',
+    sql: `SELECT title, lang, char_len, conv_title\nFROM artifacts\nWHERE renderable = true\nORDER BY char_len DESC\nLIMIT 40`,
+  },
+  {
+    label: 'Top tags',
+    sql: `SELECT tag, COUNT(*) n\nFROM (\n  SELECT UNNEST(tags) tag FROM artifacts\n)\nGROUP BY tag\nORDER BY n DESC\nLIMIT 30`,
+  },
+  {
+    label: 'Biggest artifacts',
+    sql: `SELECT title, lang, char_len, line_count, conv_title\nFROM artifacts\nORDER BY char_len DESC\nLIMIT 20`,
+  },
+  {
+    label: 'By conversation',
+    sql: `SELECT conv_title, COUNT(*) artifact_count, SUM(char_len) total_chars\nFROM artifacts\nGROUP BY conv_title\nORDER BY artifact_count DESC\nLIMIT 30`,
+  },
+  {
+    label: 'antArtifact only',
+    sql: `SELECT title, lang, char_len, tags\nFROM artifacts\nWHERE source = 'antArtifact'\nORDER BY char_len DESC\nLIMIT 40`,
+  },
+];
+---
+<Base title="DuckDB Query">
+  <div style="padding:10px 2rem; border-bottom:1px solid var(--rim)">
+    <h1 style="font-size:10px; letter-spacing:0.18em; color:var(--mist); font-weight:500; text-transform:uppercase">
+      // DUCKDB — ARTIFACT CORPUS
+    </h1>
+  </div>
+
+  <!-- SAVED QUERIES -->
+  <div style="
+    display:flex; gap:6px; padding:10px 2rem; flex-wrap:wrap;
+    border-bottom:1px solid var(--rim); background:var(--pit);
+  ">
+    {SAVED_QUERIES.map((q, i) => (
+      <button
+        class="saved-query-btn"
+        data-sql={q.sql}
+        style="
+          font-family:var(--mono); font-size:10px; padding:4px 10px;
+          border:1px solid var(--rim); border-radius:2px;
+          background:var(--well); color:var(--ash);
+          cursor:pointer; letter-spacing:0.06em;
+          transition:all 0.1s;
+        "
+      >{q.label}</button>
+    ))}
+  </div>
+
+  <!-- EDITOR + RESULTS -->
+  <div style="display:grid; grid-template-rows:auto 1fr; height:calc(100vh - 130px)">
+
+    <!-- SQL editor -->
+    <div style="border-bottom:1px solid var(--rim)">
+      <textarea
+        id="sql-input"
+        spellcheck="false"
+        style="
+          width:100%; height:120px; resize:none;
+          font-family:var(--mono); font-size:12px;
+          background:var(--pit); color:var(--chalk);
+          border:none; outline:none;
+          padding:12px 2rem; line-height:1.6;
+          border-bottom:1px solid var(--rim);
+        "
+        placeholder="SELECT * FROM artifacts WHERE renderable = true LIMIT 20"
+      >{SAVED_QUERIES[0]!.sql}</textarea>
+      <div style="
+        display:flex; align-items:center; gap:10px;
+        padding:8px 2rem; background:var(--pit);
+      ">
+        <button
+          id="run-btn"
+          style="
+            font-family:var(--mono); font-size:11px; font-weight:700;
+            padding:6px 16px; border:1px solid var(--amber);
+            color:var(--amber); background:var(--amber-dim);
+            cursor:pointer; border-radius:2px; letter-spacing:0.08em;
+            transition:all 0.1s;
+          "
+        >▶ RUN</button>
+        <span id="query-status" style="font-size:10px; color:var(--mist)">
+          DuckDB WASM · loading…
+        </span>
+        <span style="flex:1"></span>
+        <button
+          id="export-csv-btn"
+          disabled
+          style="
+            font-family:var(--mono); font-size:10px;
+            padding:5px 12px; border:1px solid var(--rim);
+            color:var(--ash); background:transparent;
+            cursor:pointer; border-radius:2px; letter-spacing:0.06em;
+            opacity:0.5;
+          "
+        >↓ CSV</button>
+      </div>
+    </div>
+
+    <!-- Results table -->
+    <div id="results-area" style="overflow:auto; padding:0">
+      <div id="results-loading" style="
+        padding:2rem; font-size:11px; color:var(--mist); letter-spacing:0.1em;
+      ">Initialising DuckDB WASM…</div>
+    </div>
+
+  </div>
+
+  <script>
+    declare const duckdb: any;
+
+    let db: any   = null;
+    let conn: any = null;
+    let lastRows: Record<string, unknown>[] = [];
+
+    async function init() {
+      // Load DuckDB WASM via CDN
+      const script = document.createElement('script');
+      script.src   = 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/dist/duckdb-browser.cjs.js';
+      document.head.appendChild(script);
+      await new Promise(r => { script.onload = r; });
+
+      const JSDELIVR_BUNDLES = window.duckdb.getJsDelivrBundles();
+      const bundle = await window.duckdb.selectBundle(JSDELIVR_BUNDLES);
+      const worker_url = URL.createObjectURL(
+        new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
+      );
+      const worker = new Worker(worker_url);
+      const logger = new window.duckdb.ConsoleLogger();
+      db   = new window.duckdb.AsyncDuckDB(logger, worker);
+      await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      conn = await db.connect();
+
+      // Load manifest and register as in-memory table
+      const resp = await fetch('/api/manifest.json');
+      const data = await resp.json();
+      const artifacts = data.artifacts ?? [];
+
+      // Create table from JSON
+      await conn.query(`
+        CREATE TABLE artifacts AS SELECT * FROM read_json_auto('${
+          // Use arrow: register as a JSON string param
+          'data:application/json,' + encodeURIComponent(JSON.stringify(artifacts))
+        }')
+      `).catch(async () => {
+        // Fallback: insert rows manually
+        if (!artifacts.length) return;
+        const cols = Object.keys(artifacts[0]);
+        const colDefs = cols.map(c => `"${c}" VARCHAR`).join(', ');
+        await conn.query(`CREATE TABLE artifacts (${colDefs})`);
+        for (const row of artifacts) {
+          const vals = cols.map(c => {
+            const v = row[c];
+            if (v === null || v === undefined) return 'NULL';
+            if (typeof v === 'boolean') return v ? 'true' : 'false';
+            if (typeof v === 'number') return String(v);
+            if (Array.isArray(v)) return `'${JSON.stringify(v).replace(/'/g, "''")}'`;
+            return `'${String(v).replace(/'/g, "''")}'`;
+          }).join(', ');
+          await conn.query(`INSERT INTO artifacts VALUES (${vals})`).catch(() => {});
+        }
+      });
+
+      document.getElementById('query-status')!.textContent =
+        `DuckDB WASM ready · ${artifacts.length} artifacts loaded`;
+      document.getElementById('results-loading')!.textContent =
+        'Run a query above ↑';
+
+      // Auto-run first query
+      await runQuery();
+    }
+
+    async function runQuery() {
+      if (!conn) return;
+      const sql = (document.getElementById('sql-input') as HTMLTextAreaElement).value.trim();
+      if (!sql) return;
+
+      const statusEl  = document.getElementById('query-status')!;
+      const resultsEl = document.getElementById('results-area')!;
+      statusEl.textContent = 'Running…';
+
+      const t0 = performance.now();
+      try {
+        const result = await conn.query(sql);
+        const elapsed = Math.round(performance.now() - t0);
+        const rows    = result.toArray().map((r: any) => r.toJSON ? r.toJSON() : Object.fromEntries(r));
+        lastRows      = rows;
+
+        if (!rows.length) {
+          resultsEl.innerHTML = `<div style="padding:2rem;font-size:11px;color:var(--mist)">No rows returned (${elapsed}ms)</div>`;
+          statusEl.textContent = `0 rows · ${elapsed}ms`;
+          return;
+        }
+
+        const cols = Object.keys(rows[0]);
+        const thead = `<tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr>`;
+        const tbody = rows.map(row =>
+          `<tr>${cols.map(c => {
+            const v = row[c];
+            const s = v === null ? '<em style="color:#555">null</em>'
+              : Array.isArray(v) ? v.join(', ')
+              : String(v);
+            return `<td>${s}</td>`;
+          }).join('')}</tr>`
+        ).join('');
+
+        resultsEl.innerHTML = `
+          <table style="
+            width:100%; border-collapse:collapse; font-size:11px;
+            font-family:var(--mono);
+          ">
+            <thead>${thead}</thead>
+            <tbody>${tbody}</tbody>
+          </table>
+        `;
+        statusEl.textContent = `${rows.length} rows · ${elapsed}ms`;
+
+        const exportBtn = document.getElementById('export-csv-btn') as HTMLButtonElement;
+        exportBtn.disabled = false;
+        exportBtn.style.opacity = '1';
+      } catch (err: any) {
+        resultsEl.innerHTML = `<div style="padding:1rem 2rem;color:#d9503a;font-size:11px;font-family:var(--mono)">${err.message}</div>`;
+        statusEl.textContent = 'Error';
+      }
+    }
+
+    function exportCSV() {
+      if (!lastRows.length) return;
+      const cols = Object.keys(lastRows[0]);
+      const csv  = [
+        cols.join(','),
+        ...lastRows.map(r => cols.map(c => {
+          const v = r[c];
+          const s = v === null ? '' : Array.isArray(v) ? `"${v.join(',')}"` : String(v);
+          return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+        }).join(','))
+      ].join('\n');
+      const url  = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+      const a    = document.createElement('a');
+      a.href = url; a.download = 'vault-query.csv'; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    document.getElementById('run-btn')!.addEventListener('click', runQuery);
+    document.getElementById('export-csv-btn')!.addEventListener('click', exportCSV);
+    document.querySelectorAll('.saved-query-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const sql = (btn as HTMLElement).dataset.sql ?? '';
+        (document.getElementById('sql-input') as HTMLTextAreaElement).value = sql;
+        runQuery();
+      });
+    });
+
+    // Ctrl+Enter to run
+    document.getElementById('sql-input')!.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runQuery(); }
+    });
+
+    // Inject table styles
+    const style = document.createElement('style');
+    style.textContent = `
+      #results-area table th {
+        position:sticky; top:0; background:var(--pit);
+        color:var(--mist); font-weight:600; font-size:10px;
+        letter-spacing:0.1em; text-transform:uppercase;
+        padding:8px 12px; text-align:left;
+        border-bottom:1px solid var(--rim);
+      }
+      #results-area table td {
+        padding:6px 12px; border-bottom:1px solid var(--rim);
+        color:var(--chalk); max-width:320px;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      }
+      #results-area table tr:hover td { background:var(--well); }
+      .saved-query-btn:hover { border-color:var(--amber)!important; color:var(--amber)!important; }
+    `;
+    document.head.appendChild(style);
+
+    init();
+  </script>
+</Base>

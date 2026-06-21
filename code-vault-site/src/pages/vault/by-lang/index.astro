@@ -1,0 +1,63 @@
+---
+/**
+ * src/pages/vault/by-lang/index.astro
+ * Language index — one card per language, sorted by artifact count.
+ */
+import Base              from '@layouts/Base.astro';
+import { getVaultStats } from '@lib/artifacts';
+import { getLangMeta }   from '@lib/types';
+
+const stats = await getVaultStats();
+const langs = Object.entries(stats.byLang).sort((a, b) => b[1] - a[1]);
+---
+<Base title="By Language">
+
+  <div style="padding:1rem 2rem; border-bottom:1px solid var(--rim)">
+    <h1 style="font-size:10px; letter-spacing:0.18em; color:var(--mist); font-weight:500; text-transform:uppercase">
+      // BY LANGUAGE — {langs.length} LANGS
+    </h1>
+  </div>
+
+  <div style="
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));
+    gap:1px; background:var(--rim);
+    border-bottom:1px solid var(--rim);
+  ">
+    {langs.map(([lang, count]) => {
+      const m = getLangMeta(lang);
+      return (
+        <a
+          href={`/vault/lang/${lang}/1/`}
+          style="
+            display:flex; flex-direction:column; gap:6px;
+            padding:1.25rem 1.5rem;
+            background:var(--well);
+            text-decoration:none;
+            transition: background 0.1s;
+          "
+        >
+          <div style={`font-size:1.4rem; font-weight:700; color:${m.color}; letter-spacing:-0.03em; line-height:1`}>
+            {count}
+          </div>
+          <div style="display:flex; gap:6px; align-items:center">
+            <span style={`font-size:11px; font-weight:700; color:${m.color}; letter-spacing:0.08em`}>
+              {lang}
+            </span>
+            <span style="font-size:10px; color:var(--mist)">{m.label}</span>
+          </div>
+          <div style="
+            height:2px; border-radius:1px; margin-top:2px;
+            background: var(--ghost);
+          ">
+            <div style={`
+              height:100%; border-radius:1px;
+              background:${m.color};
+              width:${Math.min(100, Math.round(count / langs[0][1] * 100))}%;
+            `}></div>
+          </div>
+        </a>
+      );
+    })}
+  </div>
+
+</Base>

@@ -1,0 +1,166 @@
+---
+/**
+ * src/pages/graph/index.astro
+ * Graphify node graph — Sigma.js 3 force-directed layout.
+ * Nodes: conversations (amber) + artifacts (colored by lang).
+ * Edges: produces + shares:<tag> co-occurrence.
+ */
+import Base from '@layouts/Base.astro';
+---
+<Base title="Graph — Artifact Topology">
+  <div style="padding:10px 2rem; border-bottom:1px solid var(--rim); display:flex; align-items:center; justify-content:space-between">
+    <h1 style="font-size:10px; letter-spacing:0.18em; color:var(--mist); font-weight:500; text-transform:uppercase">
+      // ARTIFACT GRAPH
+    </h1>
+    <div style="display:flex; gap:12px; font-size:10px; color:var(--mist)">
+      <span>
+        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#e8960a; margin-right:4px"></span>conversation
+      </span>
+      <span>
+        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#c94a2f; margin-right:4px"></span>html
+      </span>
+      <span>
+        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#5c3dbf; margin-right:4px"></span>react
+      </span>
+      <span>
+        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#0f7a68; margin-right:4px"></span>python
+      </span>
+    </div>
+  </div>
+
+  <!-- Graph container -->
+  <div id="graph-mount" style="
+    width:100%; height:calc(100vh - 90px);
+    background:var(--pit);
+    position:relative;
+  ">
+    <div id="graph-loading" style="
+      position:absolute; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      color:var(--mist); font-size:11px; letter-spacing:0.1em;
+    ">
+      LOADING GRAPH…
+    </div>
+  </div>
+
+  <!-- Tooltip -->
+  <div id="graph-tooltip" style="
+    display:none; position:fixed;
+    background:var(--surface); border:1px solid var(--rim);
+    padding:8px 12px; border-radius:3px;
+    font-size:11px; color:var(--chalk);
+    pointer-events:none; z-index:100;
+    max-width:240px;
+  "></div>
+
+  <script>
+    const LANG_COLORS: Record<string, string> = {
+      html: '#c94a2f', jsx: '#5c3dbf', tsx: '#5c3dbf',
+      js: '#b8860b', ts: '#3a5fcd', py: '#0f7a68',
+      sql: '#d4820a', css: '#e91e8c', md: '#666',
+      sh: '#444', astro: '#ff5d01', conversation: '#e8960a',
+    };
+
+    async function initGraph() {
+      // Dynamically load Sigma + graphology
+      await Promise.all([
+        loadScript('https://cdn.jsdelivr.net/npm/graphology@0.25.4/dist/graphology.umd.min.js'),
+        loadScript('https://cdn.jsdelivr.net/npm/sigma@3.0.0/build/sigma.min.js'),
+        loadScript('https://cdn.jsdelivr.net/npm/@antv/graphin@0.0.0/dist/graphin.min.js'),
+      ]).catch(() => {
+        // fallback: Sigma only with manual ForceAtlas2
+        loadScript('https://cdn.jsdelivr.net/npm/graphology@0.25.4/dist/graphology.umd.min.js')
+          .then(() => loadScript('https://cdn.jsdelivr.net/npm/sigma@3.0.0/build/sigma.min.js'));
+      });
+
+      const resp  = await fetch('/api/graph.json');
+      const graph = await resp.json();
+
+      const G = new window.graphology.Graph({ multi: false, type: 'directed' });
+
+      // Add nodes
+      for (const n of graph.nodes) {
+        const color = n.type === 'conversation'
+          ? LANG_COLORS.conversation
+          : (LANG_COLORS[n.lang ?? ''] ?? '#555');
+        const size  = n.type === 'conversation' ? 10 : Math.min(8, 4 + (n.char_len ?? 0) / 800);
+        G.addNode(n.id, {
+          label: n.label.length > 30 ? n.label.slice(0, 28) + '…' : n.label,
+          size,
+          color,
+          x: Math.random() * 1000,
+          y: Math.random() * 1000,
+          nodeType: n.type,
+          lang: n.lang,
+          tags: n.tags,
+        });
+      }
+
+      // Add edges
+      for (const e of graph.edges) {
+        if (!G.hasNode(e.source) || !G.hasNode(e.target)) continue;
+        if (G.hasEdge(e.source, e.target)) continue;
+        G.addEdge(e.source, e.target, {
+          size:  e.rel === 'produces' ? 1.5 : 0.4,
+          color: e.rel === 'produces' ? '#2e3338' : '#1f2226',
+          label: '',
+        });
+      }
+
+      // Random layout for initial render — replace with ForceAtlas2 if available
+      if (window.graphologyLibrary?.layout?.random) {
+        window.graphologyLibrary.layout.random.assign(G);
+      }
+
+      // Mount Sigma
+      const container = document.getElementById('graph-mount')!;
+      document.getElementById('graph-loading')!.remove();
+
+      const renderer = new window.Sigma(G, container, {
+        renderEdgeLabels: false,
+        defaultEdgeType:  'arrow',
+        labelFont:        '"IBM Plex Mono", monospace',
+        labelSize:        10,
+        labelColor:       { color: '#8a9099' },
+      });
+
+      // Tooltip
+      const tooltip = document.getElementById('graph-tooltip')!;
+      renderer.on('enterNode', ({ node }) => {
+        const attrs = G.getNodeAttributes(node);
+        tooltip.style.display = 'block';
+        tooltip.innerHTML = `
+          <div style="font-weight:600;margin-bottom:4px">${attrs.label}</div>
+          <div style="color:#5c6570;font-size:10px">${attrs.nodeType}${attrs.lang ? ` · ${attrs.lang}` : ''}</div>
+          ${attrs.tags?.length ? `<div style="color:#5c6570;font-size:10px;margin-top:3px">${attrs.tags.slice(0,4).join(', ')}</div>` : ''}
+        `;
+      });
+      renderer.on('leaveNode', () => { tooltip.style.display = 'none'; });
+      renderer.on('clickNode', ({ node }) => {
+        const attrs = G.getNodeAttributes(node);
+        if (attrs.nodeType === 'artifact') {
+          const slug = node.replace(/^art-?/, '').replace(/^art:/, '');
+          window.location.href = `/vault/${slug}/`;
+        }
+      });
+      document.addEventListener('mousemove', e => {
+        tooltip.style.left = (e.clientX + 14) + 'px';
+        tooltip.style.top  = (e.clientY + 14) + 'px';
+      });
+    }
+
+    function loadScript(src: string): Promise<void> {
+      return new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = src; s.onload = () => res(); s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    }
+
+    initGraph().catch(err => {
+      const el = document.getElementById('graph-loading');
+      if (el) el.textContent = 'Graph failed to load. Check /api/graph.json';
+      console.error(err);
+    });
+  </script>
+</Base>

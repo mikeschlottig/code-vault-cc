@@ -1,0 +1,240 @@
+# ⬛ Code Vault
+
+**Astro 6 SSG site for browsing, searching, and querying every artifact extracted from your Claude (and multi-LLM) conversation exports.**
+
+Built on the Cloudflare-native stack: Astro 6 + React islands + Cloudflare Workers static assets. Queryable in-browser via DuckDB WASM. Node-graphed via Graphify/Sigma.js.
+
+---
+
+## Stack
+
+| Layer | Tech |
+|---|---|
+| Framework | Astro 6 (SSG, `output: 'static'`) |
+| UI islands | React 19 |
+| Deployment | Cloudflare Workers Static Assets |
+| In-browser query | DuckDB WASM |
+| Graph | Sigma.js 3 + Graphology |
+| Fonts | IBM Plex Mono + Instrument Serif |
+
+---
+
+## Quick start
+
+```bash
+# 1. Install
+npm install
+
+# 2. Ingest your vault extractor output
+#    (first run the vault-ui.html extractor, export a ZIP, unzip to vault/)
+node scripts/ingest.mjs
+
+# 3. Dev
+npm run dev
+
+# 4. Build
+npm run build
+
+# 5. Deploy (Cloudflare Workers)
+npx wrangler deploy
+```
+
+---
+
+## Workflow
+
+```
+claude.ai conversations
+        │
+        ▼
+vault-ui.html extractor          ← from code-vault-extractor package
+        │
+        ▼  (ZIP download)
+vault/
+  artifacts/<lang>/<slug>.html   ← actual artifact source
+  artifacts/<lang>/<slug>.meta.json
+  manifest.json
+  graph/nodes.json
+  graph/edges.json
+        │
+        ▼  npm run ingest
+src/data/
+  artifacts/<lang>/<slug>.meta.json   ← Astro content collection input
+  manifest.json
+  graph/nodes.json + edges.json
+public/artifacts/<lang>/<slug>.html   ← served as static iframe src
+        │
+        ▼  npm run build
+dist/                                  ← deploy to Cloudflare Workers
+```
+
+---
+
+## Site routes
+
+| Route | Description |
+|---|---|
+| `/` | Home — stats bar + recent renderables |
+| `/vault/page/1/` | Paginated main gallery (all artifacts) |
+| `/vault/[slug]/` | Individual artifact detail + iframe preview |
+| `/vault/renderable/page/1/` | iframe-able artifacts only |
+| `/vault/by-lang/` | Language index |
+| `/vault/lang/[lang]/1/` | Per-language paginated gallery |
+| `/vault/by-tag/` | Tag cloud |
+| `/vault/tag/[tag]/1/` | Per-tag paginated gallery |
+| `/vault/conversations/` | Source conversation index |
+| `/vault/conversation/[conv_id]/1/` | Per-conversation artifact list |
+| `/graph/` | Sigma.js force-directed node graph |
+| `/query/` | DuckDB WASM in-browser SQL interface |
+| `/api/manifest.json` | Full artifact manifest JSON |
+| `/api/artifact/[slug].json` | Per-artifact meta JSON |
+| `/api/graph.json` | Graph nodes + edges JSON |
+
+---
+
+## Content collection schema (`src/content.config.ts`)
+
+```ts
+// artifacts — one entry per .meta.json
+{
+  id:          string   // stable uid from extractor
+  title:       string
+  slug:        string   // URL-safe, used for static routes
+  lang:        string   // html | jsx | py | sql | ts | …
+  lang_label:  string   // display: HTML, React, Python, …
+  ext:         string   // file extension
+  renderable:  boolean  // true = iframe-able
+  source:      'antArtifact' | 'fenced'
+  char_len:    number
+  line_count:  number
+  tags:        string[]
+  conv_id:     string
+  conv_title:  string
+  created_at:  string | null
+}
+```
+
+---
+
+## DuckDB queries (in-browser at `/query/`)
+
+```sql
+-- Top languages
+SELECT lang, COUNT(*) n, AVG(char_len) avg_chars
+FROM artifacts GROUP BY lang ORDER BY n DESC;
+
+-- All renderable artifacts
+SELECT title, lang, char_len, conv_title
+FROM artifacts WHERE renderable = true ORDER BY char_len DESC;
+
+-- Tag frequency
+SELECT UNNEST(tags) tag, COUNT(*) n
+FROM artifacts GROUP BY tag ORDER BY n DESC LIMIT 30;
+
+-- By conversation
+SELECT conv_title, COUNT(*) n, SUM(char_len) total_chars
+FROM artifacts GROUP BY conv_title ORDER BY n DESC;
+```
+
+---
+
+## Graphify
+
+After build, import `/api/graph.json` into:
+- **Graphify** (web)
+- **Gephi** (desktop) — import nodes.json + edges.json as CSV
+- **Obsidian Canvas** — copy node/edge data
+
+Node types: `conversation` (amber) | `artifact` (colored by lang)
+Edge types: `produces` | `shares:<tag>` (co-occurrence)
+
+---
+
+## Pagination
+
+Default: 48 items per page (`ITEMS_PER_PAGE` in `src/lib/types.ts`).
+
+With 2,847 artifacts across 60 pages: Astro generates all routes at build time. Build time ~30–90s depending on machine. For 10k+ artifacts, consider switching to `output: 'hybrid'` + Cloudflare adapter for on-demand rendering of deep pages.
+
+---
+
+## Customisation
+
+**Change items per page:**
+```ts
+// src/lib/types.ts
+export const ITEMS_PER_PAGE = 48; // adjust
+```
+
+**Change site URL:**
+```ts
+// astro.config.ts
+site: 'https://vault.leverageai.network',
+```
+
+**Enable Cloudflare Workers adapter:**
+```ts
+// astro.config.ts
+import cloudflare from '@astrojs/cloudflare';
+output: 'hybrid',
+adapter: cloudflare(),
+```
+
+---
+
+## File structure
+
+```
+code-vault/
+├── astro.config.ts
+├── tsconfig.json
+├── wrangler.toml
+├── package.json
+├── scripts/
+│   └── ingest.mjs          ← vault ZIP → src/data/ + public/artifacts/
+├── public/
+│   ├── favicon.svg
+│   ├── robots.txt
+│   └── artifacts/          ← generated by ingest, gitignored
+│       └── <lang>/<slug>.<ext>
+├── src/
+│   ├── content.config.ts   ← Astro 6 Content Layer API
+│   ├── data/               ← generated by ingest, committed as stubs
+│   │   ├── manifest.json
+│   │   ├── graph/
+│   │   │   ├── nodes.json
+│   │   │   └── edges.json
+│   │   └── artifacts/
+│   │       └── <lang>/<slug>.meta.json
+│   ├── layouts/
+│   │   └── Base.astro
+│   ├── components/
+│   │   ├── ArtifactCard.astro
+│   │   ├── Pagination.astro
+│   │   └── SearchBar.tsx   ← React island
+│   ├── lib/
+│   │   ├── types.ts
+│   │   └── artifacts.ts    ← getCollection helpers + static path generators
+│   └── pages/
+│       ├── index.astro
+│       ├── 404.astro
+│       ├── vault/
+│       │   ├── index.astro → redirect /vault/page/1/
+│       │   ├── page/[n].astro
+│       │   ├── [slug]/index.astro
+│       │   ├── renderable/
+│       │   │   ├── index.astro
+│       │   │   └── page/[n].astro
+│       │   ├── by-lang/index.astro
+│       │   ├── by-tag/index.astro
+│       │   ├── conversations/index.astro
+│       │   ├── lang/[lang]/[page].astro
+│       │   ├── tag/[tag]/[page].astro
+│       │   └── conversation/[conv_id]/[page].astro
+│       ├── graph/index.astro
+│       ├── query/index.astro
+│       └── api/
+│           ├── manifest.json.ts
+│           ├── graph.json.ts
+│           └── artifact/[slug].json.ts
+```

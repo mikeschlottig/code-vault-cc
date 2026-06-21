@@ -1,0 +1,91 @@
+---
+/**
+ * src/pages/vault/page/[n].astro
+ * Paginated main gallery — all artifacts, newest first.
+ * Routes: /vault/page/1/, /vault/page/2/, …
+ * Using /vault/page/[n]/ avoids slug collision with /vault/[slug]/
+ */
+import Base               from '@layouts/Base.astro';
+import ArtifactCard       from '@components/ArtifactCard.astro';
+import Pagination         from '@components/Pagination.astro';
+import SearchBar          from '@components/SearchBar';
+import { getAllArtifacts, paginate, getVaultStats, getAllLangs, getAllTags } from '@lib/artifacts';
+import { ITEMS_PER_PAGE } from '@lib/types';
+
+export async function getStaticPaths() {
+  const all   = await getAllArtifacts();
+  const total = Math.max(1, Math.ceil(all.length / ITEMS_PER_PAGE));
+  return Array.from({ length: total }, (_, i) => ({
+    params: { n: String(i + 1) },
+    props:  { page: i + 1 },
+  }));
+}
+
+interface Props { page: number }
+
+const { page }  = Astro.props;
+const [all, stats, langs, tags] = await Promise.all([
+  getAllArtifacts(), getVaultStats(), getAllLangs(), getAllTags()
+]);
+const paged     = paginate(all, page);
+---
+<Base title={`Gallery — Page ${page} of ${paged.totalPages}`}>
+
+  <!-- TOOLBAR -->
+  <div style="
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;
+    padding:0.85rem 2rem; border-bottom:1px solid var(--rim);
+    background:var(--pit); position:sticky; top:40px; z-index:40;
+  ">
+    <h1 style="font-size:10px; letter-spacing:0.15em; color:var(--mist); font-weight:500; text-transform:uppercase">
+      // ALL ARTIFACTS&nbsp;
+      <span style="color:var(--amber)">{paged.totalItems.toLocaleString()}</span>
+    </h1>
+
+    <div style="display:flex; gap:6px; flex-wrap:wrap">
+      <a href="/vault/renderable/" style="
+        font-size:10px; padding:4px 10px;
+        border:1px solid var(--teal); color:var(--teal);
+        border-radius:2px; text-decoration:none; letter-spacing:0.06em;
+        transition:all 0.1s;
+      ">iframe ✓ ({stats.renderable})</a>
+      <a href="/vault/by-lang/" style="
+        font-size:10px; padding:4px 10px;
+        border:1px solid var(--rim); color:var(--ash);
+        border-radius:2px; text-decoration:none; letter-spacing:0.06em;
+      ">by lang</a>
+      <a href="/vault/by-tag/" style="
+        font-size:10px; padding:4px 10px;
+        border:1px solid var(--rim); color:var(--ash);
+        border-radius:2px; text-decoration:none; letter-spacing:0.06em;
+      ">by tag</a>
+    </div>
+  </div>
+
+  <!-- CLIENT-SIDE SEARCH ISLAND (filters current page only) -->
+  <SearchBar
+    client:load
+    langs={langs}
+    tags={tags.slice(0, 20).map(t => t.tag)}
+    totalItems={paged.items.length}
+  />
+
+  <!-- GRID -->
+  <div style="
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
+    gap:12px;
+    padding:1.25rem 2rem;
+  ">
+    {paged.items.map(entry => (
+      <ArtifactCard entry={entry} />
+    ))}
+  </div>
+
+  <Pagination
+    currentPage={paged.currentPage}
+    totalPages={paged.totalPages}
+    baseHref="/vault/page/"
+  />
+
+</Base>

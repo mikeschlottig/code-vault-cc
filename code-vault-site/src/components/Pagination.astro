@@ -1,0 +1,97 @@
+---
+/**
+ * src/components/Pagination.astro
+ * Reusable paginator — renders numbered links with prev/next.
+ * baseHref should end with a trailing slash: /vault/lang/html/
+ * Pages are appended as /vault/lang/html/2/ etc.
+ */
+interface Props {
+  currentPage: number;
+  totalPages:  number;
+  baseHref:    string;   // e.g. /vault/lang/html/
+}
+
+const { currentPage, totalPages, baseHref } = Astro.props;
+
+function pageHref(n: number) {
+  return `${baseHref}${n}/`;
+}
+
+// Build a window of page numbers around currentPage
+const window = 2;
+const pages: (number | '...')[] = [];
+
+for (let i = 1; i <= totalPages; i++) {
+  if (
+    i === 1 || i === totalPages ||
+    (i >= currentPage - window && i <= currentPage + window)
+  ) {
+    pages.push(i);
+  } else if (
+    pages[pages.length - 1] !== '...'
+  ) {
+    pages.push('...');
+  }
+}
+---
+
+{totalPages > 1 && (
+  <nav
+    aria-label="Pagination"
+    style="
+      display: flex; align-items: center; justify-content: center;
+      gap: 4px; padding: 1.5rem;
+      border-top: 1px solid var(--rim);
+    "
+  >
+    {currentPage > 1 ? (
+      <a
+        href={pageHref(currentPage - 1)}
+        style="
+          padding: 5px 12px; border: 1px solid var(--rim);
+          color: var(--ash); font-size: 11px; letter-spacing:0.06em;
+          text-decoration:none; border-radius:2px;
+          transition: all 0.1s;
+        "
+      >← prev</a>
+    ) : (
+      <span style="padding:5px 12px; color:var(--ghost); font-size:11px">← prev</span>
+    )}
+
+    {pages.map(p => p === '...' ? (
+      <span style="padding:5px 6px; color:var(--ghost); font-size:11px">…</span>
+    ) : (
+      <a
+        href={pageHref(p as number)}
+        aria-current={p === currentPage ? 'page' : undefined}
+        style={`
+          padding: 5px 10px;
+          border: 1px solid ${p === currentPage ? 'var(--amber)' : 'var(--rim)'};
+          color: ${p === currentPage ? 'var(--amber)' : 'var(--ash)'};
+          font-size: 11px; letter-spacing: 0.06em;
+          text-decoration:none; border-radius:2px;
+          background: ${p === currentPage ? 'var(--amber-dim)' : 'transparent'};
+          transition: all 0.1s;
+        `}
+      >{p}</a>
+    ))}
+
+    {currentPage < totalPages ? (
+      <a
+        href={pageHref(currentPage + 1)}
+        style="
+          padding: 5px 12px; border: 1px solid var(--rim);
+          color: var(--ash); font-size: 11px; letter-spacing:0.06em;
+          text-decoration:none; border-radius:2px;
+          transition: all 0.1s;
+        "
+      >next →</a>
+    ) : (
+      <span style="padding:5px 12px; color:var(--ghost); font-size:11px">next →</span>
+    )}
+
+    <span style="margin-left:8px; font-size:10px; color:var(--mist); letter-spacing:0.08em">
+      {currentPage} / {totalPages}
+    </span>
+  </nav>
+)}

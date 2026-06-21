@@ -1,0 +1,26 @@
+# wrangler.toml
+# Cloudflare Workers + Static Assets deployment for Code Vault
+# Docs: https://developers.cloudflare.com/workers/static-assets/
+
+name       = "code-vault"
+main       = "dist/_worker.js"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "./dist"
+html_handling = "auto-trailing-slash"
+not_found_handling = "single-page-application"
+
+# KV namespace for optional caching layer (uncomment after creating)
+# [[kv_namespaces]]
+# binding = "VAULT_KV"
+# id      = "YOUR_KV_NAMESPACE_ID"
+
+# D1 binding for future server-side querying (uncomment after creating)
+# [[d1_databases]]
+# binding  = "VAULT_DB"
+# database_name = "code-vault"
+# database_id   = "YOUR_D1_DATABASE_ID"
+
+[build]
+command = "npm run build"

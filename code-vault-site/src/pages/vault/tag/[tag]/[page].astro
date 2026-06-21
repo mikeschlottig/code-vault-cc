@@ -1,0 +1,53 @@
+---
+/**
+ * src/pages/vault/tag/[tag]/[page].astro
+ * Per-tag paginated gallery.
+ * Routes: /vault/tag/cloudflare/1/, /vault/tag/local-seo/2/, …
+ */
+import Base              from '@layouts/Base.astro';
+import ArtifactCard      from '@components/ArtifactCard.astro';
+import Pagination        from '@components/Pagination.astro';
+import { tagStaticPaths, paginate } from '@lib/artifacts';
+import type { ArtifactEntry }       from '@lib/types';
+
+export const getStaticPaths = tagStaticPaths;
+
+interface Props {
+  tag:        string;
+  page:       number;
+  entries:    ArtifactEntry[];
+  totalPages: number;
+}
+
+const { tag, page, entries, totalPages } = Astro.props;
+const paged = paginate(entries, page);
+---
+<Base title={`#${tag} — Page ${page}`}>
+  <div style="
+    display:flex; align-items:center; justify-content:space-between;
+    padding:1rem 2rem; border-bottom:1px solid var(--rim); flex-wrap:wrap; gap:8px;
+  ">
+    <div style="display:flex; align-items:center; gap:10px">
+      <a href="/vault/by-tag/" style="font-size:10px; color:var(--mist); text-decoration:none; letter-spacing:0.06em">BY TAG</a>
+      <span style="color:var(--ghost)">/</span>
+      <h1 style="font-size:13px; font-weight:600; color:var(--amber)"># {tag}</h1>
+      <span style="font-size:10px; color:var(--mist)">{paged.totalItems} artifacts</span>
+    </div>
+    <a href="/vault/by-tag/" style="font-size:10px; color:var(--ash); letter-spacing:0.06em">← all tags</a>
+  </div>
+
+  <div style="
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
+    gap:12px; padding:1.25rem 2rem;
+  ">
+    {paged.items.map(entry => (
+      <ArtifactCard entry={entry} showConv={true} />
+    ))}
+  </div>
+
+  <Pagination
+    currentPage={paged.currentPage}
+    totalPages={totalPages}
+    baseHref={`/vault/tag/${encodeURIComponent(tag)}/`}
+  />
+</Base>

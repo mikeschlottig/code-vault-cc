@@ -1,0 +1,65 @@
+---
+/**
+ * src/pages/vault/lang/[lang]/[page].astro
+ * Per-language paginated artifact gallery.
+ * Routes: /vault/lang/html/1/, /vault/lang/py/2/, …
+ */
+import Base              from '@layouts/Base.astro';
+import ArtifactCard      from '@components/ArtifactCard.astro';
+import Pagination        from '@components/Pagination.astro';
+import { langStaticPaths, paginate } from '@lib/artifacts';
+import { getLangMeta } from '@lib/types';
+import type { ArtifactEntry } from '@lib/types';
+
+export const getStaticPaths = langStaticPaths;
+
+interface Props {
+  lang:       string;
+  page:       number;
+  entries:    ArtifactEntry[];
+  totalPages: number;
+}
+
+const { lang, page, entries, totalPages } = Astro.props;
+const paged = paginate(entries, page);
+const m     = getLangMeta(lang);
+---
+<Base title={`${m.label} Artifacts — Page ${page}`}>
+
+  <!-- HEADER -->
+  <div style="
+    display:flex; align-items:center; justify-content:space-between;
+    padding:1rem 2rem; border-bottom:1px solid var(--rim);
+    flex-wrap:wrap; gap:8px;
+  ">
+    <div style="display:flex; align-items:center; gap:12px">
+      <a href="/vault/by-lang/" style="font-size:10px; color:var(--mist); text-decoration:none; letter-spacing:0.06em">
+        BY LANG
+      </a>
+      <span style="color:var(--ghost)">/</span>
+      <h1 style={`font-size:13px; font-weight:700; color:${m.color}; letter-spacing:0.08em`}>
+        {lang.toUpperCase()}
+      </h1>
+      <span style="font-size:10px; color:var(--mist)">
+        {paged.totalItems} artifacts
+      </span>
+    </div>
+    <a href="/vault/1/" style="font-size:10px; color:var(--ash); letter-spacing:0.06em">← all</a>
+  </div>
+
+  <div style="
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
+    gap:12px; padding:1.25rem 2rem;
+  ">
+    {paged.items.map(entry => (
+      <ArtifactCard entry={entry} showConv={true} />
+    ))}
+  </div>
+
+  <Pagination
+    currentPage={paged.currentPage}
+    totalPages={totalPages}
+    baseHref={`/vault/lang/${lang}/`}
+  />
+
+</Base>

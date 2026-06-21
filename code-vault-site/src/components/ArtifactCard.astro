@@ -1,0 +1,213 @@
+---
+/**
+ * src/components/ArtifactCard.astro
+ * Single artifact card — iframe thumbnail for renderables, code preview for others.
+ * Used in every gallery grid across the site.
+ */
+import type { ArtifactEntry } from '@lib/types';
+import { getLangMeta }        from '@lib/types';
+
+interface Props {
+  entry:    ArtifactEntry;
+  /** When true, shows the full conv title in the meta row */
+  showConv?: boolean;
+}
+
+const { entry, showConv = false } = Astro.props;
+const { data }                    = entry;
+const m                           = getLangMeta(data.lang);
+
+// Artifact source file path (relative to /public/artifacts/ which holds the actual code)
+const srcPath = `/artifacts/${data.lang}/${data.slug}.${data.ext}`;
+---
+
+<article
+  class="art-card"
+  data-lang={data.lang}
+  data-renderable={String(data.renderable)}
+  data-source={data.source}
+  data-tags={data.tags.join(' ')}
+>
+  <!-- BADGES -->
+  <header class="card-badges">
+    <span
+      class="lang-badge"
+      style={`background:${m.color}22; color:${m.color}; border: 1px solid ${m.color}44`}
+    >
+      {data.lang_label}
+    </span>
+    {data.renderable && (
+      <span style="font-size:10px; color:var(--teal); letter-spacing:0.04em">iframe ✓</span>
+    )}
+    {data.source === 'antArtifact' && (
+      <span style="font-size:10px; color:var(--purple); letter-spacing:0.04em">artifact</span>
+    )}
+  </header>
+
+  <!-- THUMBNAIL -->
+  {data.renderable ? (
+    <div class="thumb-wrap">
+      <iframe
+        src={srcPath}
+        sandbox="allow-scripts"
+        loading="lazy"
+        title={data.title}
+        class="thumb-iframe"
+      ></iframe>
+      <!-- overlay captures click, passes to detail link -->
+      <a href={`/vault/${data.slug}/`} class="thumb-overlay" aria-label={`Open ${data.title}`}></a>
+    </div>
+  ) : (
+    <a href={`/vault/${data.slug}/`} class="code-preview-wrap" aria-label={`Open ${data.title}`}>
+      <pre class="code-preview">{
+        /* We don't have the code body in meta.json — show lang + size hint */
+        `${data.lang_label} · ${data.char_len.toLocaleString()} chars · ${data.line_count} lines`
+      }</pre>
+    </a>
+  )}
+
+  <!-- BODY -->
+  <div class="card-body">
+    <a href={`/vault/${data.slug}/`} class="card-title">{data.title}</a>
+    <div class="card-meta">
+      {showConv && <span>{data.conv_title} · </span>}
+      <span>{data.char_len.toLocaleString()}c</span>
+      <span class="sep">·</span>
+      <span>{data.line_count}L</span>
+      {data.created_at && (
+        <>
+          <span class="sep">·</span>
+          <time datetime={data.created_at}>
+            {new Date(data.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </time>
+        </>
+      )}
+    </div>
+    {data.tags.length > 0 && (
+      <div class="card-tags">
+        {data.tags.slice(0, 4).map(tag => (
+          <a href={`/vault/tag/${encodeURIComponent(tag)}/1/`} class="tag-pill">{tag}</a>
+        ))}
+      </div>
+    )}
+  </div>
+
+  <!-- ACTIONS -->
+  <footer class="card-actions">
+    <a href={`/vault/${data.slug}/`}>view</a>
+    {data.renderable && <a href={srcPath} target="_blank" rel="noopener">open ↗</a>}
+    <a href={`/vault/${data.slug}/#code`}>source</a>
+    <a href={`/vault/conversation/${data.conv_id}/1/`}>conv</a>
+  </footer>
+</article>
+
+<style>
+  .art-card {
+    background: var(--well);
+    border: 1px solid var(--rim);
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.12s, transform 0.12s;
+  }
+  .art-card:hover {
+    border-color: var(--amber);
+    transform: translateY(-1px);
+  }
+
+  .card-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px 5px;
+    border-bottom: 1px solid var(--rim);
+  }
+
+  .thumb-wrap {
+    height: 150px;
+    overflow: hidden;
+    background: var(--pit);
+    position: relative;
+  }
+  .thumb-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    pointer-events: none;
+  }
+  .thumb-overlay {
+    position: absolute;
+    inset: 0;
+    display: block;
+  }
+
+  .code-preview-wrap {
+    display: block;
+    height: 90px;
+    overflow: hidden;
+    background: var(--pit);
+    text-decoration: none;
+    padding: 10px 12px;
+  }
+  .code-preview {
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--mist);
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .card-body {
+    padding: 8px 10px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .card-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--chalk);
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card-title:hover { color: var(--amber); }
+
+  .card-meta {
+    font-size: 10px;
+    color: var(--mist);
+    display: flex;
+    gap: 0;
+    flex-wrap: wrap;
+  }
+  .sep { margin: 0 4px; }
+
+  .card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 2px;
+  }
+
+  .card-actions {
+    display: flex;
+    border-top: 1px solid var(--rim);
+  }
+  .card-actions a {
+    flex: 1;
+    text-align: center;
+    padding: 5px 4px;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    color: var(--amber);
+    text-decoration: none;
+    border-right: 1px solid var(--rim);
+    transition: background 0.1s;
+  }
+  .card-actions a:last-child { border-right: none; }
+  .card-actions a:hover { background: var(--amber-dim); }
+</style>

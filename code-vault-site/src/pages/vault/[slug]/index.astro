@@ -1,0 +1,127 @@
+---
+/**
+ * src/pages/vault/[slug]/index.astro
+ * Individual artifact detail page.
+ * Routes: /vault/geo-rank-grid/, /vault/my-component/, …
+ */
+import Base               from '@layouts/Base.astro';
+import { getAllArtifacts } from '@lib/artifacts';
+import { getLangMeta }    from '@lib/types';
+import type { ArtifactEntry } from '@lib/types';
+
+export async function getStaticPaths() {
+  const all = await getAllArtifacts();
+  return all.map(entry => ({
+    params: { slug: entry.data.slug },
+    props:  { entry },
+  }));
+}
+
+interface Props { entry: ArtifactEntry }
+
+const { entry }  = Astro.props;
+const { data }   = entry;
+const m          = getLangMeta(data.lang);
+const srcPath    = `/artifacts/${data.lang}/${data.slug}.${data.ext}`;
+
+const all     = await getAllArtifacts();
+const related = all
+  .filter(e =>
+    e.data.slug !== data.slug &&
+    (e.data.lang === data.lang || e.data.tags.some(t => data.tags.includes(t)))
+  )
+  .sort((a, b) => {
+    const aScore = (a.data.lang === data.lang ? 2 : 0) + a.data.tags.filter(t => data.tags.includes(t)).length;
+    const bScore = (b.data.lang === data.lang ? 2 : 0) + b.data.tags.filter(t => data.tags.includes(t)).length;
+    return bScore - aScore;
+  })
+  .slice(0, 6);
+---
+<Base title={data.title} description={`${data.lang_label} · ${data.char_len.toLocaleString()} chars · from: ${data.conv_title}`}>
+
+  <nav style="padding:10px 2rem;border-bottom:1px solid var(--rim);font-size:10px;letter-spacing:0.08em;color:var(--mist);display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+    <a href="/vault/page/1/" style="color:var(--mist);text-decoration:none">VAULT</a>
+    <span>/</span>
+    <a href={`/vault/lang/${data.lang}/1/`} style={`color:${m.color};text-decoration:none;font-weight:700`}>{data.lang.toUpperCase()}</a>
+    <span>/</span>
+    <span style="color:var(--chalk);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px">{data.title}</span>
+  </nav>
+
+  <header style="padding:1.5rem 2rem;border-bottom:1px solid var(--rim);display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+        <span style={`display:inline-block;font-size:10px;font-weight:700;padding:2px 9px;border-radius:2px;letter-spacing:0.1em;background:${m.color}22;color:${m.color};border:1px solid ${m.color}44`}>{data.lang_label}</span>
+        {data.renderable && <span style="font-size:10px;color:var(--teal);letter-spacing:0.06em;border:1px solid var(--teal);padding:2px 8px;border-radius:2px">iframe ✓</span>}
+        {data.source === 'antArtifact' && <span style="font-size:10px;color:var(--purple);letter-spacing:0.06em;border:1px solid var(--purple);padding:2px 8px;border-radius:2px">antArtifact</span>}
+      </div>
+      <h1 style="font-family:var(--serif);font-style:italic;font-size:clamp(1.3rem,3vw,1.8rem);font-weight:400;color:var(--snow);line-height:1.2;word-break:break-word">{data.title}</h1>
+      <p style="font-size:11px;color:var(--mist);margin-top:8px">
+        from <a href={`/vault/conversation/${data.conv_id}/1/`} style="color:var(--amber)">{data.conv_title}</a>
+        {data.created_at && <> · <time datetime={data.created_at}>{new Date(data.created_at).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})}</time></>}
+      </p>
+    </div>
+    <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap">
+      {data.renderable && <a href={srcPath} target="_blank" rel="noopener" style="padding:7px 16px;border:1px solid var(--teal);color:var(--teal);font-size:11px;letter-spacing:0.08em;border-radius:2px;text-decoration:none">open ↗</a>}
+      <a href={`/api/artifact/${data.slug}.json`} style="padding:7px 14px;border:1px solid var(--rim);color:var(--ash);font-size:11px;letter-spacing:0.08em;border-radius:2px;text-decoration:none">meta.json</a>
+      <a href={srcPath} download style="padding:7px 14px;border:1px solid var(--rim);color:var(--ash);font-size:11px;letter-spacing:0.08em;border-radius:2px;text-decoration:none">↓ raw</a>
+    </div>
+  </header>
+
+  <section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));border-bottom:1px solid var(--rim)">
+    {([['chars',data.char_len.toLocaleString()],['lines',data.line_count.toLocaleString()],['source',data.source],['ext',`.${data.ext}`],['id',data.id]] as const).map(([label,val]) => (
+      <div style="padding:0.75rem 1.25rem;border-right:1px solid var(--rim)">
+        <div style="font-size:9px;letter-spacing:0.12em;color:var(--mist);text-transform:uppercase;margin-bottom:3px">{label}</div>
+        <div style="font-size:12px;color:var(--chalk);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{val}</div>
+      </div>
+    ))}
+  </section>
+
+  {data.tags.length > 0 && (
+    <section style="padding:0.75rem 2rem;border-bottom:1px solid var(--rim);display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:9px;letter-spacing:0.12em;color:var(--mist);text-transform:uppercase;margin-right:4px">TAGS</span>
+      {data.tags.map(tag => <a href={`/vault/tag/${encodeURIComponent(tag)}/1/`} class="tag-pill">{tag}</a>)}
+    </section>
+  )}
+
+  {data.renderable && (
+    <section style="padding:1.5rem 2rem;border-bottom:1px solid var(--rim)" id="preview">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+        <h2 style="font-size:10px;letter-spacing:0.15em;color:var(--mist);text-transform:uppercase">// PREVIEW</h2>
+        <a href={srcPath} target="_blank" rel="noopener" style="font-size:10px;color:var(--amber);letter-spacing:0.06em">fullscreen ↗</a>
+      </div>
+      <div style="border:1px solid var(--rim);border-radius:4px;overflow:hidden;background:var(--pit)">
+        <iframe src={srcPath} sandbox="allow-scripts allow-same-origin" style="width:100%;height:520px;border:none;display:block" title={data.title} loading="lazy"></iframe>
+      </div>
+    </section>
+  )}
+
+  <section style="padding:1.5rem 2rem;border-bottom:1px solid var(--rim)" id="code">
+    <h2 style="font-size:10px;letter-spacing:0.15em;color:var(--mist);text-transform:uppercase;margin-bottom:1rem">// SOURCE</h2>
+    <div style="background:var(--pit);border:1px solid var(--rim);border-radius:3px;padding:0.85rem 1.25rem;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <code style="font-size:11px;color:var(--ash);flex:1">{srcPath}</code>
+      <a href={srcPath} target="_blank" rel="noopener" style="font-size:10px;color:var(--amber);letter-spacing:0.06em;white-space:nowrap">view raw ↗</a>
+    </div>
+  </section>
+
+  {related.length > 0 && (
+    <section style="padding:1.5rem 2rem 2rem">
+      <h2 style="font-size:10px;letter-spacing:0.15em;color:var(--mist);text-transform:uppercase;margin-bottom:1rem">// RELATED</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">
+        {related.map(rel => {
+          const rm = getLangMeta(rel.data.lang);
+          return (
+            <a href={`/vault/${rel.data.slug}/`} style="display:block;padding:10px 12px;background:var(--well);border:1px solid var(--rim);border-radius:3px;text-decoration:none;transition:border-color 0.12s">
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+                <span style={`font-size:9px;font-weight:700;letter-spacing:0.1em;color:${rm.color}`}>{rel.data.lang_label}</span>
+                {rel.data.renderable && <span style="font-size:9px;color:var(--teal)">iframe ✓</span>}
+              </div>
+              <div style="font-size:11px;color:var(--chalk);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{rel.data.title}</div>
+              <div style="font-size:10px;color:var(--mist);margin-top:2px">{rel.data.char_len.toLocaleString()}c · {rel.data.line_count}L</div>
+            </a>
+          );
+        })}
+      </div>
+    </section>
+  )}
+
+</Base>

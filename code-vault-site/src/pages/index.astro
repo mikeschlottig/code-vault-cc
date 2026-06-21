@@ -1,0 +1,158 @@
+---
+/**
+ * src/pages/index.astro
+ * Code Vault home — stats bar, top renderable artifacts, quick-access nav.
+ */
+import Base               from '@layouts/Base.astro';
+import ArtifactCard       from '@components/ArtifactCard.astro';
+import { getVaultStats, getAllArtifacts } from '@lib/artifacts';
+import { getLangMeta }    from '@lib/types';
+
+const stats    = await getVaultStats();
+const all      = await getAllArtifacts();
+const featured = all.filter(e => e.data.renderable).slice(0, 12);
+---
+<Base title="Code Vault" description="Every artifact extracted from your Claude conversations.">
+
+  <!-- ── HERO ── -->
+  <section style="
+    padding: 3rem 2rem 2rem;
+    border-bottom: 1px solid var(--rim);
+  ">
+    <p style="
+      font-size: 10px; letter-spacing: 0.18em; color: var(--amber);
+      margin-bottom: 1rem;
+    ">// LEVERAGEAI · CODE VAULT · GRANTS PASS OR</p>
+
+    <h1 style="
+      font-family: var(--serif); font-style: italic;
+      font-size: clamp(2.2rem, 5vw, 3.5rem); font-weight: 400;
+      line-height: 1.05; letter-spacing: -0.02em;
+      color: var(--snow);
+      margin-bottom: 1rem;
+    ">
+      Every artifact,<br /><em style="color:var(--amber)">finally navigable.</em>
+    </h1>
+
+    <p style="
+      max-width: 560px; font-size: 13px; color: var(--ash); line-height: 1.7;
+    ">
+      {stats.total.toLocaleString()} artifacts extracted from {stats.conversations.toLocaleString()} conversations.
+      {stats.renderable.toLocaleString()} render as iframes. Queryable via DuckDB.
+      Graphed via Graphify. 400MB → {Math.round(stats.totalChars / 1024)}KB of structured data.
+    </p>
+  </section>
+
+  <!-- ── STATS BAR ── -->
+  <section style="
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    border-bottom: 1px solid var(--rim);
+  ">
+    {([
+      { num: stats.total,         label: 'total artifacts', color: 'var(--amber)' },
+      { num: stats.renderable,    label: 'renderable',      color: 'var(--coral)' },
+      { num: stats.languages,     label: 'languages',       color: 'var(--teal)'  },
+      { num: stats.conversations, label: 'conversations',   color: 'var(--purple)'},
+      { num: stats.topTags.length,label: 'topic tags',      color: 'var(--fog)'   },
+    ] as const).map(s => (
+      <div style="
+        padding: 1.25rem 1.5rem;
+        border-right: 1px solid var(--rim);
+      ">
+        <div style={`font-size: 1.8rem; font-weight: 700; line-height:1; color:${s.color}; letter-spacing:-0.04em`}>
+          {s.num.toLocaleString()}
+        </div>
+        <div style="font-size:10px; letter-spacing:0.1em; color:var(--mist); margin-top:4px; text-transform:uppercase">
+          {s.label}
+        </div>
+      </div>
+    ))}
+  </section>
+
+  <!-- ── LANG BREAKDOWN ── -->
+  <section style="
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid var(--rim);
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  ">
+    <span style="font-size:10px; letter-spacing:0.12em; color:var(--mist); margin-right:4px">
+      BY LANG
+    </span>
+    {Object.entries(stats.byLang)
+      .sort((a, b) => b[1] - a[1])
+      .map(([lang, count]) => {
+        const m = getLangMeta(lang);
+        return (
+          <a
+            href={`/vault/lang/${lang}/1/`}
+            style={`
+              display:inline-flex; align-items:center; gap:5px;
+              padding: 4px 10px; border-radius:3px;
+              background:${m.bg}18; border: 1px solid ${m.color}44;
+              color:${m.color}; font-size:11px; font-weight:600;
+              text-decoration:none; letter-spacing:0.06em;
+              transition: all 0.12s;
+            `}
+          >
+            {lang}
+            <span style={`color:${m.color}88; font-weight:400`}>{count}</span>
+          </a>
+        );
+    })}
+  </section>
+
+  <!-- ── FEATURED RENDERABLES ── -->
+  <section style="padding: 1.5rem 2rem">
+    <div style="
+      display:flex; justify-content:space-between; align-items:baseline;
+      margin-bottom: 1.25rem;
+    ">
+      <h2 style="
+        font-size:10px; letter-spacing:0.18em; color:var(--mist);
+        text-transform:uppercase; font-weight:500;
+      ">// RENDERABLE — RECENT</h2>
+      <a href="/vault/renderable/page/1/" style="font-size:11px; color:var(--amber)">
+        view all {stats.renderable} →
+      </a>
+    </div>
+
+    <div style="
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+    ">
+      {featured.map(entry => (
+        <ArtifactCard entry={entry} />
+      ))}
+    </div>
+  </section>
+
+  <!-- ── TOP TAGS ── -->
+  <section style="
+    padding: 1.25rem 2rem 2rem;
+    border-top: 1px solid var(--rim);
+  ">
+    <h2 style="
+      font-size:10px; letter-spacing:0.18em; color:var(--mist);
+      text-transform:uppercase; font-weight:500; margin-bottom:1rem;
+    ">// TOP TAGS</h2>
+    <div style="display:flex; flex-wrap:wrap; gap:6px;">
+      {stats.topTags.map(({ tag, count }) => (
+        <a
+          href={`/vault/tag/${encodeURIComponent(tag)}/1/`}
+          style="
+            padding:4px 10px; border-radius:2px;
+            background:var(--well); border:1px solid var(--rim);
+            color:var(--ash); font-size:11px; text-decoration:none;
+            transition: all 0.12s;
+          "
+        >
+          {tag}
+          <span style="color:var(--mist); margin-left:5px">{count}</span>
+        </a>
+      ))}
+    </div>
+  </section>
+
+</Base>
